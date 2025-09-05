@@ -24,6 +24,35 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				
+				// Brand colors
+				brand: {
+					primary: 'hsl(var(--brand-primary))',
+					secondary: 'hsl(var(--brand-secondary))',
+					accent: 'hsl(var(--brand-accent))',
+				},
+				
+				// Surface colors
+				surface: {
+					DEFAULT: 'hsl(var(--surface))',
+					secondary: 'hsl(var(--surface-secondary))',
+					hover: 'hsl(var(--surface-hover))',
+				},
+				
+				// Text colors
+				text: {
+					primary: 'hsl(var(--text-primary))',
+					secondary: 'hsl(var(--text-secondary))',
+					muted: 'hsl(var(--text-muted))',
+				},
+				
+				// Interactive colors
+				interactive: {
+					primary: 'hsl(var(--interactive-primary))',
+					hover: 'hsl(var(--interactive-hover))',
+					active: 'hsl(var(--interactive-active))',
+				},
+				
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
@@ -52,6 +81,9 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				success: 'hsl(var(--success))',
+				warning: 'hsl(var(--warning))',
+				error: 'hsl(var(--error))',
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
