@@ -73,38 +73,71 @@ router.post('/analyze', [
       });
     }
 
-    // Create or update video record
-    if (!existingVideo) {
-      existingVideo = new Video({ 
-        url, 
-        videoId, 
-        processingStatus: 'processing',
-        title: 'Processing...',
-        description: '',
-        duration: 0,
-        thumbnailUrl: '',
-        channelName: '',
-        publishedAt: new Date(),
-        transcript: '',
-        summary: ''
-      });
-      await existingVideo.save();
-    } else {
-      existingVideo.processingStatus = 'processing';
-      await existingVideo.save();
-    }
+    // Process video immediately (don't save incomplete data to DB first)
+    try {
+      // Step 1: Get video info and transcript
+      const videoData = await youtubeService.processVideo(url);
+      
+      // Step 2: Generate AI summary
+      const aiServiceInstance = getAIService();
+      const summary = await aiServiceInstance.generateSummary(
+        videoData.transcript,
+        videoData.title,
+        videoData.channelName,
+        videoData.duration
+      );
 
-    // Process video in background (return immediate response)
-    processVideoInBackground(existingVideo._id, url);
+      // Step 3: Extract key points
+      const keyPoints = await aiServiceInstance.extractKeyPoints(
+        videoData.transcript,
+        videoData.title
+      );
 
-    res.json({
-      success: true,
-      message: 'Video processing started',
-      data: {
-        videoId: existingVideo._id,
-        status: 'processing'
+      // Step 4: Generate tags
+      const tags = await aiServiceInstance.generateTags(
+        videoData.transcript,
+        videoData.title,
+        videoData.channelName
+      );
+
+      // Step 5: Save complete video data
+      const completeVideoData = {
+        ...videoData,
+        summary,
+        keyPoints,
+        tags,
+        processingStatus: 'completed'
+      };
+
+      let video;
+      if (!existingVideo) {
+        video = new Video(completeVideoData);
+        await video.save();
+      } else {
+        Object.assign(existingVideo, completeVideoData);
+        await existingVideo.save();
+        video = existingVideo;
       }
-    });
+
+      // Add to history
+      await updateVideoHistory(video);
+
+      console.log(`✅ Video processing completed: ${video.videoId}`);
+
+      return res.json({
+        success: true,
+        message: 'Video analysis completed',
+        data: video
+      });
+
+    } catch (error) {
+      console.error('❌ Video processing error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to analyze video',
+        error: error.message
+      });
+    }
 
   } catch (error) {
     console.error('❌ Video analysis error:', error);
