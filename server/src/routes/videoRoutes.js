@@ -289,14 +289,22 @@ router.get('/status/:videoId', async (req, res) => {
   }
 });
 
-// GET /api/videos/:videoId - Get complete video data
-router.get('/:videoId', [
-  param('videoId').isMongoId().withMessage('Invalid video ID')
-], handleValidationErrors, async (req, res) => {
+// GET /api/videos/:videoId - Get complete video data (accepts both MongoDB ObjectId and YouTube video ID)
+router.get('/:videoId', async (req, res) => {
   try {
     const { videoId } = req.params;
     
-    const video = await Video.findById(videoId);
+    let video;
+    
+    // Check if it's a MongoDB ObjectId (24 hex characters) or YouTube video ID (11 characters)
+    if (videoId.match(/^[0-9a-fA-F]{24}$/)) {
+      // MongoDB ObjectId format
+      video = await Video.findById(videoId);
+    } else {
+      // YouTube video ID format
+      video = await Video.findByVideoId(videoId);
+    }
+    
     if (!video) {
       return res.status(404).json({
         success: false,
