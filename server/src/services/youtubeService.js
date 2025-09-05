@@ -1,5 +1,6 @@
 import ytdl from 'ytdl-core';
 import { YoutubeTranscript } from 'youtube-transcript';
+import fetch from 'node-fetch';
 
 export class YouTubeService {
   constructor() {
@@ -40,20 +41,77 @@ export class YouTubeService {
       }
 
       const videoId = this.extractVideoId(url);
-      const info = await ytdl.getInfo(url);
+      
+      // Try multiple methods to get video info
+      let info;
+      
+      // Method 1: Use agent with more robust options
+      try {
+        const agent = ytdl.createAgent([
+          {
+            transform: (req) => {
+              req.headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://www.youtube.com/',
+                'Origin': 'https://www.youtube.com',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin'
+              };
+            }
+          }
+        ]);
+        
+        info = await ytdl.getInfo(url, { agent });
+      } catch (agentError) {
+        console.log('Agent method failed, trying basic info method');
+        
+        // Method 2: Use basic info without agent
+        try {
+          info = await ytdl.getBasicInfo(url);
+        } catch (basicError) {
+          console.log('Basic info method failed, trying alternative extraction');
+          
+          // Method 3: Use alternative video info extraction
+          const altInfo = await this.getAlternativeVideoInfo(videoId, url);
+          if (altInfo) {
+            info = { videoDetails: altInfo };
+          } else {
+            throw new Error('All video info extraction methods failed');
+          }
+        }
+      }
       
       const videoDetails = info.videoDetails;
       
+      // Safely extract data with fallbacks
+      const title = videoDetails.title || 'Unknown Title';
+      const description = videoDetails.description || '';
+      const duration = parseInt(videoDetails.lengthSeconds) || 0;
+      const thumbnails = videoDetails.thumbnails || [];
+      const thumbnailUrl = thumbnails.length > 0 
+        ? thumbnails[thumbnails.length - 1].url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+        : `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+      const channelName = videoDetails.author?.name || videoDetails.ownerChannelName || 'Unknown Channel';
+      const publishedAt = videoDetails.publishDate ? new Date(videoDetails.publishDate) : new Date();
+      const viewCount = parseInt(videoDetails.viewCount) || 0;
+      const likeCount = parseInt(videoDetails.likes) || 0;
+      
       return {
         videoId,
-        title: videoDetails.title,
-        description: videoDetails.description,
-        duration: parseInt(videoDetails.lengthSeconds),
-        thumbnailUrl: videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url,
-        channelName: videoDetails.author.name,
-        publishedAt: new Date(videoDetails.publishDate),
-        viewCount: parseInt(videoDetails.viewCount) || 0,
-        likeCount: parseInt(videoDetails.likes) || 0,
+        title,
+        description,
+        duration,
+        thumbnailUrl,
+        channelName,
+        publishedAt,
+        viewCount,
+        likeCount,
         url
       };
     } catch (error) {
@@ -91,6 +149,51 @@ export class YouTubeService {
       } catch (altError) {
         throw new Error(`Failed to get video transcript: ${error.message}`);
       }
+    }
+  }
+
+  /**
+   * Alternative video info extraction method
+   */
+  async getAlternativeVideoInfo(videoId, url) {
+    try {
+      // Try to get basic info from YouTube's oEmbed API
+      const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      
+      const response = await fetch(oEmbedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          title: data.title || 'Unknown Title',
+          description: '',
+          lengthSeconds: '0',
+          thumbnails: [{ url: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` }],
+          author: { name: data.author_name || 'Unknown Channel' },
+          publishDate: new Date(),
+          viewCount: '0',
+          likes: '0'
+        };
+      }
+      
+      // Fallback with basic info
+      return {
+        title: 'YouTube Video',
+        description: '',
+        lengthSeconds: '0',
+        thumbnails: [{ url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` }],
+        author: { name: 'Unknown Channel' },
+        publishDate: new Date(),
+        viewCount: '0',
+        likes: '0'
+      };
+    } catch (error) {
+      console.error('Alternative video info extraction failed:', error);
+      return null;
     }
   }
 
@@ -138,9 +241,16 @@ export class YouTubeService {
       const videoInfo = await this.getVideoInfo(url);
       console.log(`Video info retrieved: ${videoInfo.title}`);
 
-      // Get transcript
-      const transcript = await this.getTranscript(videoInfo.videoId);
-      console.log(`Transcript retrieved: ${transcript.length} characters`);
+      // Get transcript with fallback
+      let transcript = '';
+      try {
+        transcript = await this.getTranscript(videoInfo.videoId);
+        console.log(`Transcript retrieved: ${transcript.length} characters`);
+      } catch (transcriptError) {
+        console.log('Transcript not available, using fallback content');
+        // Create fallback content from title and description
+        transcript = `Video Title: ${videoInfo.title}\n\nChannel: ${videoInfo.channelName}\n\nDescription: ${videoInfo.description || 'No description available.'}\n\nNote: This video does not have captions/transcript available.`;
+      }
 
       return {
         ...videoInfo,
