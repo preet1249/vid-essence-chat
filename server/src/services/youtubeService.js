@@ -125,7 +125,11 @@ export class YouTubeService {
    */
   async getTranscript(videoId) {
     try {
-      const transcriptArray = await YoutubeTranscript.fetchTranscript(videoId);
+      // Check for rate limiting and handle gracefully
+      const transcriptArray = await YoutubeTranscript.fetchTranscript(videoId, {
+        lang: 'en',
+        country: 'US'
+      });
       
       if (!transcriptArray || transcriptArray.length === 0) {
         throw new Error('No transcript available for this video');
@@ -142,7 +146,16 @@ export class YouTubeService {
     } catch (error) {
       console.error('Error getting transcript:', error);
       
-      // Try alternative transcript extraction methods
+      // Handle specific YouTube rate limiting errors gracefully
+      if (error.message.includes('too many requests') || 
+          error.message.includes('captcha') ||
+          error.message.includes('YoutubeTranscriptTooManyRequestError') ||
+          error.name === 'YoutubeTranscriptTooManyRequestError') {
+        console.log('YouTube transcript rate limited, skipping to fallback content');
+        throw new Error('No transcript available for this video');
+      }
+      
+      // Try alternative transcript extraction methods for other errors
       try {
         const alternativeTranscript = await this.getAlternativeTranscript(videoId);
         return alternativeTranscript;
